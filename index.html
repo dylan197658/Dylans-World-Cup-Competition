@@ -4,12 +4,15 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>World Cup Sweepstake Tracker</title>
+    <!-- Tailwind CSS for modern app-like UI -->
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <!-- FontAwesome for clean icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 <body class="bg-slate-900 text-slate-100 font-sans min-h-screen antialiased selection:bg-indigo-500/30">
 
     <div class="max-w-md mx-auto p-4 pb-12">
+        <!-- App Header -->
         <header class="text-center my-6">
             <div class="inline-flex items-center justify-center bg-indigo-600 text-white w-12 h-12 rounded-2xl shadow-lg shadow-indigo-500/20 mb-3">
                 <i class="fa-solid font-black fa-trophy text-xl"></i>
@@ -18,6 +21,7 @@
             <p class="text-xs text-slate-400 font-medium tracking-widest uppercase mt-1">Live Sheets Feed Dashboard</p>
         </header>
 
+        <!-- Leaderboard Section -->
         <main class="space-y-4">
             <div class="bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-3xl p-5 shadow-xl">
                 <div class="flex justify-between items-center mb-4">
@@ -27,10 +31,13 @@
                     <span id="loading-badge" class="text-[10px] bg-amber-500/10 text-amber-400 font-bold px-2 py-0.5 rounded-full border border-amber-500/20 animate-pulse">Syncing Sheets...</span>
                 </div>
                 
+                <!-- Dynamic Leaderboard Container -->
                 <div id="leaderboard" class="space-y-2">
-                    </div>
+                    <!-- Loaded dynamically from Google Sheets -->
+                </div>
             </div>
 
+            <!-- Scoring Reference Card -->
             <div class="bg-slate-800/30 border border-slate-800 rounded-2xl p-4 text-xs text-slate-400 space-y-2">
                 <p class="font-bold text-slate-300 uppercase tracking-wider text-[10px]">Scoring System</p>
                 <div class="grid grid-cols-2 gap-2">
@@ -41,8 +48,10 @@
         </main>
     </div>
 
+    <!-- Modal Popup for Breakdown -->
     <div id="modal" class="fixed inset-0 bg-black/70 backdrop-blur-md hidden flex items-center justify-center p-4 z-50 transition-opacity duration-300 opacity-0">
         <div class="bg-slate-800 border border-slate-700 w-full max-w-sm rounded-3xl p-6 shadow-2xl transform scale-95 transition-transform duration-300 flex flex-col max-h-[85vh]">
+            <!-- Modal Header -->
             <div class="flex justify-between items-start mb-4">
                 <div>
                     <h3 id="modal-title" class="text-xl font-black text-white">Player</h3>
@@ -53,14 +62,17 @@
                 </button>
             </div>
 
+            <!-- Modal Content (Scrollable) -->
             <div id="modal-content" class="space-y-4 overflow-y-auto pr-1 flex-1 text-sm text-slate-300">
-                </div>
+                <!-- JS injects breakdown here -->
+            </div>
         </div>
     </div>
 
+    <!-- App Logic -->
     <script>
-        // Pointing directly to your specific Google Sheet (exported as CSV)
-        const SHEET_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vS_g7F6Y8rD8f91vTf9w10-I7x-L_KbeDREeL3mY6qR9Yd8a_w9f8vT8eL1Z_c7B6Cw-A/pub?gid=0&output=csv';
+        // Pointing directly to your specific Google Sheet URL using the direct export format
+        const SHEET_CSV_URL = 'https://docs.google.com/spreadsheets/d/1AzxpmFSdefQyGP1zvc53H0jRPG7yW27PEDZ7Bt6CRaA/export?format=csv';
 
         // Player assignments
         const players = [
@@ -154,4 +166,144 @@
 
                     const matchAndApplyBonus = (stageFlag, property) => {
                         if (scoreRaw.includes(stageFlag)) {
-                            if (allTrackedTeams.includes(home))
+                            if (allTrackedTeams.includes(home)) teamStats[home][property] = true;
+                            if (allTrackedTeams.includes(away)) teamStats[away][property] = true;
+                        }
+                    };
+
+                    matchAndApplyBonus('(R32)', 'r32');
+                    matchAndApplyBonus('(R16)', 'r16');
+                    matchAndApplyBonus('(QF)', 'qf');
+                    matchAndApplyBonus('(SF)', 'sf');
+                    matchAndApplyBonus('(F)', 'f');
+                }
+
+                // Update UI Indicator to success
+                document.getElementById('loading-badge').className = "text-[10px] bg-emerald-500/10 text-emerald-400 font-bold px-2 py-0.5 rounded-full border border-emerald-500/20";
+                document.getElementById('loading-badge').innerText = "Synced";
+                renderLeaderboard();
+
+            } catch (error) {
+                console.error("Error syncing Google Sheet data:", error);
+                document.getElementById('loading-badge').className = "text-[10px] bg-rose-500/10 text-rose-400 font-bold px-2 py-0.5 rounded-full border border-rose-500/20";
+                document.getElementById('loading-badge').innerText = "Sync Failed";
+            }
+        }
+
+        function calculateTeamPoints(teamName) {
+            const stats = teamStats[teamName];
+            const matchPoints = (stats.w * 3) + (stats.d * 1) + (stats.l * -1);
+            
+            let bonusPoints = 0;
+            if (stats.r32) bonusPoints += 5;
+            if (stats.r16) bonusPoints += 6;
+            if (stats.qf)  bonusPoints += 7;
+            if (stats.sf)  bonusPoints += 8;
+            if (stats.f)   bonusPoints += 10;
+
+            return { total: matchPoints + bonusPoints, matchPoints, bonusPoints, stats };
+        }
+
+        function getPlayerData() {
+            return players.map(player => {
+                let totalScore = 0;
+                let breakdown = [];
+
+                player.teams.forEach(team => {
+                    const data = calculateTeamPoints(team);
+                    totalScore += data.total;
+                    breakdown.push({ team, points: data.total, stats: data.stats });
+                });
+
+                return { name: player.name, totalScore, breakdown };
+            }).sort((a, b) => b.totalScore - a.totalScore);
+        }
+
+        function renderLeaderboard() {
+            const data = getPlayerData();
+            const container = document.getElementById('leaderboard');
+            container.innerHTML = '';
+
+            data.forEach((player, index) => {
+                let rankBadge = `<span class="text-xs font-bold text-slate-400 w-5">${index + 1}</span>`;
+                if (index === 0) rankBadge = `<span class="flex items-center justify-center bg-amber-500 text-slate-950 rounded-full w-5 h-5 text-[10px] font-black shadow-amber-500/20">1</span>`;
+                if (index === 1) rankBadge = `<span class="flex items-center justify-center bg-slate-300 text-slate-950 rounded-full w-5 h-5 text-[10px] font-black shadow-slate-300/20">2</span>`;
+                if (index === 2) rankBadge = `<span class="flex items-center justify-center bg-amber-700 text-white rounded-full w-5 h-5 text-[10px] font-black shadow-amber-700/20">3</span>`;
+
+                const row = document.createElement('button');
+                row.className = "w-full text-left flex items-center justify-between p-3.5 rounded-2xl bg-slate-800/40 hover:bg-slate-700/40 border border-slate-700/30 transition active:scale-[0.99] touch-manipulation focus:outline-none";
+                row.onclick = () => openModal(player);
+
+                row.innerHTML = `
+                    <div class="flex items-center gap-3">
+                        ${rankBadge}
+                        <div>
+                            <div class="font-bold text-slate-100">${player.name}</div>
+                            <div class="text-[11px] text-slate-400 font-medium">${player.breakdown.map(b => b.team).join(', ')}</div>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="text-lg font-black tracking-tight text-white">${player.totalScore}</span>
+                        <i class="fa-solid fa-chevron-right text-[10px] text-slate-500"></i>
+                    </div>
+                `;
+                container.appendChild(row);
+            });
+        }
+
+        function openModal(player) {
+            document.getElementById('modal-title').innerText = player.name;
+            const content = document.getElementById('modal-content');
+            content.innerHTML = '';
+
+            player.breakdown.forEach(b => {
+                const teamCard = document.createElement('div');
+                teamCard.className = "bg-slate-900/60 border border-slate-700/40 rounded-2xl p-3.5 space-y-2.5";
+                
+                let bonuses = [];
+                if (b.stats.r32) bonuses.push('R32 (+5)');
+                if (b.stats.r16) bonuses.push('R16 (+6)');
+                if (b.stats.qf)  bonuses.push('QF (+7)');
+                if (b.stats.sf)  bonuses.push('SF (+8)');
+                if (b.stats.f)   bonuses.push('F (+10)');
+                const bonusText = bonuses.length > 0 ? bonuses.join(', ') : 'None';
+
+                teamCard.innerHTML = `
+                    <div class="flex justify-between items-center border-b border-slate-800 pb-1.5">
+                        <span class="font-bold text-white text-base">${b.team}</span>
+                        <span class="bg-indigo-500/10 text-indigo-400 font-black text-xs px-2.5 py-1 rounded-full border border-indigo-500/20">${b.points} pts</span>
+                    </div>
+                    <div class="grid grid-cols-3 text-center gap-1 text-xs">
+                        <div class="bg-emerald-500/5 border border-emerald-500/10 rounded-lg p-1.5"><div class="text-slate-400 text-[10px] uppercase font-bold">W</div><div class="text-emerald-400 font-bold text-sm">${b.stats.w}</div></div>
+                        <div class="bg-amber-500/5 border border-amber-500/10 rounded-lg p-1.5"><div class="text-slate-400 text-[10px] uppercase font-bold">D</div><div class="text-amber-400 font-bold text-sm">${b.stats.d}</div></div>
+                        <div class="bg-rose-500/5 border border-rose-500/10 rounded-lg p-1.5"><div class="text-slate-400 text-[10px] uppercase font-bold">L</div><div class="text-rose-400 font-bold text-sm">${b.stats.l}</div></div>
+                    </div>
+                    <div class="text-[11px] text-slate-400 pt-0.5">
+                        <span class="font-bold text-slate-300">Stage Progression:</span> <span class="italic text-indigo-300">${bonusText}</span>
+                    </div>
+                `;
+                content.appendChild(teamCard);
+            });
+
+            const modal = document.getElementById('modal');
+            modal.classList.remove('hidden');
+            setTimeout(() => {
+                modal.classList.remove('opacity-0');
+                modal.querySelector('div').classList.remove('scale-95');
+            }, 10);
+        }
+
+        function closeModal() {
+            const modal = document.getElementById('modal');
+            modal.classList.add('opacity-0');
+            modal.querySelector('div').classList.add('scale-95');
+            setTimeout(() => { modal.classList.add('hidden'); }, 300);
+        }
+
+        window.onclick = function(e) { if (e.target == document.getElementById('modal')) closeModal(); }
+
+        // Fetch on boot
+        loadDataFromSheets();
+    </script>
+</body>
+</html>
